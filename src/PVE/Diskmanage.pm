@@ -387,6 +387,9 @@ sub get_udev_info {
 
     $data->{serial} = 'unknown';
     $data->{serial} = $1 if $info =~ m/^E: ID_SERIAL_SHORT=\s*(\S+)$/m;
+    # virtio block devices only have ID_SERIAL
+    $data->{serial} = $1
+        if $data->{serial} eq 'unknown' && $info =~ m/^E: ID_SERIAL=\s*(\S+)$/m;
 
     $data->{gpt} = $info =~ m/^E: ID_PART_TABLE_TYPE=gpt$/m ? 1 : 0;
 
