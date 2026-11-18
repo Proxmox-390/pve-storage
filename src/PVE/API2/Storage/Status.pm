@@ -1054,7 +1054,8 @@ __PACKAGE__->register_method({
                 type => 'object',
                 additionalProperties => 1,
                 optional => 1,
-                description => 'Recognised disk volumes as `$bus$id` => `$storeid:$path` map.',
+                description => 'Recognised disk volumes as `$bus$id` => `$storeid:$path` map.'
+                    . ' An entry can have \'options\': further drive options to use.',
             },
             'net' => {
                 type => 'object',
@@ -1077,11 +1078,13 @@ __PACKAGE__->register_method({
                             enum => [
                                 'cdrom-image-ignored',
                                 'efi-state-lost',
+                                'foreign-architecture',
                                 'guest-is-running',
                                 'nvme-unsupported',
                                 'ova-needs-extracting',
                                 'ovmf-with-lsi-unsupported',
                                 'serial-port-socket-only',
+                                'tape-medium-missing',
                             ],
                             type => 'string',
                         },

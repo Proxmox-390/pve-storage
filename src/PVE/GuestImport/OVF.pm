@@ -14,6 +14,14 @@ use PVE::Tools;
 use PVE::Storage;
 use PVE::Seccomp qw(stmt /^BPF_/);
 
+# Namespace of the Proxmox VE configuration section in OVF descriptors written by Proxmox VE (see
+# PVE::QemuServer::OVA). The section carries the guest configuration that OVF has no resource
+# types for, so a Proxmox VE host recreates the guest as it was exported: VirtIO devices, machine
+# type, s390x DASDs, tape drives, 3270 terminals and device numbers, for example. Other OVF
+# consumers ignore it (ovf:required="false").
+our $PVE_OVF_NS = 'http://www.proxmox.com/schema/ovf';
+our $PVE_OVF_SECTION_VERSION = 1;
+
 # map OVF resources types to descriptive strings
 # this will allow us to explore the xml tree without using magic numbers
 # http://schemas.dmtf.org/wbem/cim-html/2/CIM_ResourceAllocationSettingData.html
@@ -164,6 +172,7 @@ sub try_parse_capacity_unit {
         my $exp = $2;
         return $base**$exp;
     }
+    return 1 if $unit_text =~ m/^\s*byte\s*$/; # sizes that are not whole KiB, like CKD volumes
 
     return undef;
 }
@@ -196,6 +205,7 @@ my sub parse_ovf_do {
     my $xpc = XML::LibXML::XPathContext->new($dom);
     $xpc->registerNs('ovf', 'http://schemas.dmtf.org/ovf/envelope/1');
     $xpc->registerNs('vmw', 'http://www.vmware.com/schema/ovf');
+    $xpc->registerNs('pve', $PVE_OVF_NS);
     $xpc->registerNs(
         'rasd',
         'http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_ResourceAllocationSettingData',
@@ -366,6 +376,7 @@ ovf:Item[rasd:InstanceID='%s']/rasd:ResourceType", $controller_id,
                 filepath => $filepath,
                 virtual_size => $virtual_size,
                 disk_address => $pve_disk_address,
+                disk_id => $disk_id,
             };
     }
 
@@ -385,7 +396,172 @@ ovf:Item[rasd:InstanceID='%s']/rasd:ResourceType", $controller_id,
         $net_count++;
     }
 
-    return { qm => $qm, disks => \@disks, net => $net };
+    # the Proxmox VE configuration section, interpreted in apply_pve_section()
+    my $pve;
+    my ($pve_section) = $xpc->findnodes('/ovf:Envelope/ovf:VirtualSystem/pve:ConfigSection');
+    if ($pve_section) {
+        $pve = {
+            version => $pve_section->getAttributeNS($PVE_OVF_NS, 'version'),
+            arch => $pve_section->getAttributeNS($PVE_OVF_NS, 'arch'),
+            config => [],
+        };
+        for my $node ($xpc->findnodes('pve:Config', $pve_section)) {
+            my $entry = {};
+            for my $attr (qw(key value diskId)) {
+                my $value = $node->getAttributeNS($PVE_OVF_NS, $attr);
+                $entry->{$attr} = $value if defined($value);
+            }
+            push $pve->{config}->@*, $entry;
+        }
+    }
+
+    return { qm => $qm, disks => \@disks, net => $net, pve => $pve };
+}
+
+# The configuration keys taken from the Proxmox VE section, with a check of the value. The values
+# are checked once more by the VM creation API, this only keeps out what must not come from an
+# untrusted archive (host paths, hook scripts, pass-through devices, ...).
+my $pve_simple_value_re = qr/^[A-Za-z0-9\-_.:=,;+\/ ]*$/;
+my $pve_config_keys = {
+    (
+        map { $_ => $pve_simple_value_re }
+            qw(
+            acpi agent balloon bios boot cores cpu cpuunits ipl keyboard kvm localtime machine memory
+            numa ostype scsihw shares sockets tablet vcpus vga
+            )
+    ),
+    description => qr/^.*$/s,
+    tags => $pve_simple_value_re,
+};
+my $pve_config_key_patterns = [
+    [qr/^terminal\d+$/, $pve_simple_value_re],
+    [qr/^tape\d+$/, $pve_simple_value_re],
+    [qr/^serial\d+$/, qr/^socket$/],
+    [qr/^numa\d+$/, $pve_simple_value_re],
+];
+
+# Options of disks and network devices that are taken over. A disk also gets 'import-from', a NIC
+# its bridge from the import.
+my $pve_drive_options = {
+    map { $_ => 1 }
+        qw(
+        aio backup cache devno discard iothread model name replicate ro serial ssd wwn
+        )
+};
+my $pve_drive_key_re = qr/^(?:ide|sata|scsi|virtio|fba|ckd)\d+$/;
+
+my $pve_net_options = { map { $_ => 1 }
+    qw(bridge devno firewall link_down macaddr model mtu queues rate tag trunks) };
+
+my sub pve_section_value_ok {
+    my ($key, $value) = @_;
+
+    return 0 if !defined($value);
+    if (my $re = $pve_config_keys->{$key}) {
+        return $value =~ $re;
+    }
+    for my $pattern (@$pve_config_key_patterns) {
+        my ($key_re, $value_re) = @$pattern;
+        return $value =~ $value_re if $key =~ $key_re;
+    }
+    return 0;
+}
+
+# Split a property string like 'qeth=BC:24:11:00:00:01,bridge=vmbr0' into its key=value pairs. A
+# leading bare value or 'model=mac' pair is returned under the key '' and as model/macaddr.
+my sub split_property_string {
+    my ($value) = @_;
+
+    my $res = {};
+    for my $part (split(/,/, $value)) {
+        if ($part =~ m/^([a-z][a-z0-9_\-]*)=(.*)$/) {
+            $res->{$1} = $2;
+        } elsif (!defined($res->{''})) {
+            $res->{''} = $part;
+        }
+    }
+    return $res;
+}
+
+# Apply the Proxmox VE configuration section to the parsed OVF ($res as parse_ovf_do returns it).
+# Only for the architecture it was written for: a guest exported from another architecture gets
+# the generic OVF mapping and a 'foreign-architecture' warning.
+my sub apply_pve_section {
+    my ($res, $host_arch) = @_;
+
+    my $pve = delete $res->{pve} or return;
+    my $warnings = $res->{warnings} //= [];
+
+    my $version = $pve->{version} // '';
+    if ($version !~ m/^\d+$/ || $version > $PVE_OVF_SECTION_VERSION) {
+        warn "ignoring Proxmox VE configuration section of unsupported version '$version'\n";
+        return;
+    }
+
+    my $arch = $pve->{arch} // 'x86_64';
+    if ($arch ne $host_arch) {
+        push @$warnings, { type => 'foreign-architecture', key => 'arch', value => $arch };
+        return;
+    }
+
+    my $disks_by_id = { map { ($_->{disk_id} // '') => $_ } $res->{disks}->@* };
+    my $qm = $res->{qm};
+    my $net = {};
+    my $drive_keys = {};
+    my $assigned_disks = {};
+    my $boot;
+
+    for my $entry ($pve->{config}->@*) {
+        my ($key, $value, $disk_id) = $entry->@{qw(key value diskId)};
+        next if !defined($key) || !defined($value);
+
+        if ($key =~ $pve_drive_key_re) {
+            # a disk that is in the archive, its options
+            next if !defined($disk_id) || $drive_keys->{$key} || $assigned_disks->{$disk_id};
+            my $disk = $disks_by_id->{$disk_id} or next;
+            $assigned_disks->{$disk_id} = 1;
+            my $props = split_property_string($value);
+            my $options = {};
+            for my $opt (sort keys %$props) {
+                next if !$pve_drive_options->{$opt};
+                next if $props->{$opt} !~ m/^[A-Za-z0-9\-_.:]+$/;
+                $options->{$opt} = $props->{$opt};
+            }
+            $disk->{disk_address} = $key;
+            $disk->{options} = $options if scalar(keys %$options);
+            $drive_keys->{$key} = 1;
+        } elsif ($key =~ m/^net\d+$/) {
+            my $props = split_property_string($value);
+            my $nic = {};
+            for my $opt (sort keys %$props) {
+                my $v = $props->{$opt};
+                next if $v !~ m/^[A-Za-z0-9\-_.:;]+$/;
+                if ($pve_net_options->{$opt}) {
+                    $nic->{$opt} = $v;
+                } elsif (
+                    $opt =~ m/^[a-z][a-z0-9\-]*$/
+                    && $v =~ m/^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}$/
+                ) {
+                    # '<model>=<mac>'
+                    $nic->@{qw(model macaddr)} = ($opt, $v) if !defined($nic->{model});
+                }
+            }
+            $nic->{model} //= $props->{''};
+            next if !defined($nic->{model}) || $nic->{model} !~ m/^[a-z][a-z0-9\-]*$/;
+            $net->{$key} = $nic;
+        } elsif ($key eq 'boot') {
+            $boot = $value if pve_section_value_ok($key, $value);
+        } elsif (pve_section_value_ok($key, $value)) {
+            $qm->{$key} = $value;
+        } else {
+            warn "ignoring '$key' from the Proxmox VE configuration section\n";
+        }
+    }
+
+    $res->{net} = $net if scalar(keys %$net);
+    $res->{boot} = $boot if defined($boot);
+
+    return;
 }
 
 my sub resolve_disks {
@@ -400,6 +576,7 @@ my sub resolve_disks {
         my $filepath = $disk->{filepath};
         my $virtual_size = $disk->{virtual_size};
         my $pve_disk_address = $disk->{disk_address};
+        my $options = $disk->{options};
 
         # resolve symlinks and relative path components
         # and die if the diskimage is not somewhere under the $ovf path
@@ -432,11 +609,16 @@ my sub resolve_disks {
             relative_path => $filepath,
         };
         $pve_disk->{virtual_size} = $virtual_size if defined($virtual_size);
+        $pve_disk->{options} = $options if defined($options);
         push @disks, $pve_disk;
         push @$boot_order, $pve_disk_address;
     }
 
-    $qm->{qm}->{boot} = "order=" . join(';', @$boot_order) if scalar(@$boot_order) > 0;
+    if (defined(my $boot = delete $qm->{boot})) {
+        $qm->{qm}->{boot} = $boot;
+    } elsif (scalar(@$boot_order) > 0) {
+        $qm->{qm}->{boot} = "order=" . join(';', @$boot_order);
+    }
 
     $qm->{disks} = \@disks;
     return;
@@ -455,7 +637,7 @@ my sub bpf_prog {
 }
 
 sub parse_ovf {
-    my ($ovf, $isOva, $debug) = @_;
+    my ($ovf, $isOva, $debug, $host_arch) = @_;
 
     my $qm = PVE::Tools::run_fork_with_timeout(
         3,
@@ -473,6 +655,7 @@ sub parse_ovf {
         die "OVF parser terminated unexpectedly trying to parse $ovf\n";
     }
 
+    apply_pve_section($qm, $host_arch // PVE::Tools::get_host_arch());
     resolve_disks($ovf, $qm, $isOva);
 
     return $qm;

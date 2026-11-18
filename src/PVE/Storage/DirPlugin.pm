@@ -290,7 +290,28 @@ sub get_import_metadata {
         $disks->{$id} = {
             volid => $volid,
             defined($size) ? (size => $size) : (),
+            defined($disk->{options}) ? (options => $disk->{options}) : (),
         };
+    }
+
+    push @$warnings, ($res->{warnings} // [])->@*;
+
+    # tape media are referenced, not contained: keep a medium only if it is a volume that exists
+    my $create_args = $res->{qm};
+    for my $key (sort grep { m/^tape\d+$/ } keys %$create_args) {
+        my ($file, $rest) = $create_args->{$key} =~ m/^(?:file=)?([^,]*)(.*)$/;
+        next if $file eq 'none';
+        my $exists = eval {
+            my $cfg = PVE::Storage::config();
+            my ($vtype) = PVE::Storage::parse_volname($cfg, $file);
+            die "not an ISO image volume\n" if $vtype ne 'iso';
+            my $path = PVE::Storage::path($cfg, $file);
+            -f $path;
+        };
+        if (!$exists) {
+            $create_args->{$key} = "none$rest";
+            push @$warnings, { type => 'tape-medium-missing', key => $key, value => $file };
+        }
     }
 
     if (defined($res->{qm}->{bios}) && $res->{qm}->{bios} eq 'ovmf') {
