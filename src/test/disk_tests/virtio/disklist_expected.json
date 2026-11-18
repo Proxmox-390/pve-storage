@@ -1,0 +1,17 @@
+{
+    "vda" : {
+	"wearout" : "N/A",
+	"vendor" : "0x1af4",
+	"rpm" : -1,
+	"type" : "unknown",
+	"serial" : "SERIAL1",
+	"osdid" : -1,
+	"osdid-list" : null,
+	"health" : "UNKNOWN",
+	"model" : "unknown",
+	"size" : 10737418240,
+	"wwn" : "unknown",
+	"gpt" : 1,
+	"devpath" : "/dev/vda"
+    }
+}

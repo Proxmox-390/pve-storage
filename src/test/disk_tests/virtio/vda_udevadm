@@ -1,0 +1,18 @@
+P: /devices/css0/0.0.0000/0.0.0001/virtio1/block/vda
+N: vda
+S: disk/by-id/virtio-SERIAL1
+S: disk/by-path/ccw-0.0.0001
+E: DEVLINKS=/dev/disk/by-id/virtio-SERIAL1 /dev/disk/by-path/ccw-0.0.0001
+E: DEVNAME=/dev/vda
+E: DEVPATH=/devices/css0/0.0.0000/0.0.0001/virtio1/block/vda
+E: DEVTYPE=disk
+E: ID_PART_TABLE_TYPE=gpt
+E: ID_PART_TABLE_UUID=a8a5b3b5-2e8d-4f3a-9c1e-0d5d6c3b1f2a
+E: ID_PATH=ccw-0.0.0001
+E: ID_PATH_TAG=ccw-0_0_0001
+E: ID_SERIAL=SERIAL1
+E: MAJOR=254
+E: MINOR=0
+E: SUBSYSTEM=block
+E: TAGS=:systemd:
+E: USEC_INITIALIZED=1234567
