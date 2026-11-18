@@ -178,7 +178,8 @@ init_plugins($custom_plugins);
 # the following REs indicate the number or capture groups via the trailing digit
 # CAUTION don't forget to update the digits accordingly after messing with the capture groups
 
-our $ISO_EXT_RE_0 = qr/\.(?:iso|img)/i;
+# ISO images, and AWSTAPE tape images, the install media of s390x VMs
+our $ISO_EXT_RE_0 = qr/\.(?:iso|img|aws)/i;
 
 our $VZTMPL_EXT_RE_1 = qr/\.(?|(tar)(?!\.)|tar\.(gz|xz|zst|bz2))/i;
 

@@ -54,6 +54,16 @@ my $tests = [
         expected =>
             ['iso', 'some-other-installation-disk.img', undef, undef, undef, undef, 'raw'],
     },
+    {
+        description => 'ISO image, AWSTAPE tape image',
+        volname => 'iso/some-installation-tape.aws',
+        expected => ['iso', 'some-installation-tape.aws', undef, undef, undef, undef, 'raw'],
+    },
+    {
+        description => 'ISO image, AWSTAPE tape image in upper case',
+        volname => 'iso/SYSTEM.AWS',
+        expected => ['iso', 'SYSTEM.AWS', undef, undef, undef, undef, 'raw'],
+    },
     #
     # container templates
     #
