@@ -605,12 +605,14 @@ __PACKAGE__->register_method({
             }
             $path = PVE::Storage::get_vztmpl_dir($cfg, $storage);
         } elsif ($content eq 'import') {
+            eval { PVE::Storage::assert_not_compressed_dasd($filename) };
+            raise_param_exc({ filename => "$@" }) if $@;
             if ($filename !~
                 m!${PVE::Storage::SAFE_CHAR_CLASS_RE}+$PVE::Storage::UPLOAD_IMPORT_EXT_RE_1$!
             ) {
                 raise_param_exc({ filename => "invalid filename or wrong extension" });
             }
-            my $format = $1;
+            my $format = PVE::Storage::import_format($1);
 
             if ($format eq 'ova') {
                 $is_ova = 1;
@@ -842,12 +844,14 @@ __PACKAGE__->register_method({
             }
             $path = PVE::Storage::get_vztmpl_dir($cfg, $storage);
         } elsif ($content eq 'import') {
+            eval { PVE::Storage::assert_not_compressed_dasd($filename) };
+            raise_param_exc({ filename => "$@" }) if $@;
             if ($filename !~
                 m!${PVE::Storage::SAFE_CHAR_CLASS_RE}+$PVE::Storage::UPLOAD_IMPORT_EXT_RE_1$!
             ) {
                 raise_param_exc({ filename => "invalid filename or wrong extension" });
             }
-            my $format = $1;
+            my $format = PVE::Storage::import_format($1);
 
             if ($format eq 'ova') {
                 $is_ova = 1;

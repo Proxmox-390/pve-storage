@@ -72,6 +72,7 @@ my $scfg = {
         'images' => 1,
         'snippets' => 1,
         'backup' => 1,
+        'import' => 1,
     },
 };
 
@@ -524,6 +525,34 @@ my @tests = (
         expected => [], # returns empty list
     },
     {
+        description => 'VMID: none, import images incl. s390x DASD images',
+        vmid => undef,
+        files => [
+            "$storage_dir/import/sysrs1.ckd",
+            "$storage_dir/import/work01.ckd64",
+            "$storage_dir/import/work02.fba",
+            "$storage_dir/import/disk.qcow2",
+            "$storage_dir/import/compressed.cckd",
+            "$storage_dir/import/compressed.cfba",
+        ],
+        expected => [
+            map {
+                {
+                    'content' => 'import',
+                    'ctime' => DEFAULT_CTIME,
+                    'format' => $_->[1],
+                    'size' => DEFAULT_SIZE,
+                    'volid' => "local:import/$_->[0]",
+                }
+            } (
+                ['disk.qcow2', 'qcow2'],
+                ['sysrs1.ckd', 'raw'],
+                ['work01.ckd64', 'raw'],
+                ['work02.fba', 'raw'],
+            )
+        ],
+    },
+    {
         description => 'VMID: none, names with a newline',
         vmid => undef,
         files => [
@@ -602,7 +631,7 @@ plan tests => $plan + 1;
 
 {
     my $sid = 'local';
-    my $types = ['rootdir', 'images', 'vztmpl', 'iso', 'backup', 'snippets'];
+    my $types = ['rootdir', 'images', 'vztmpl', 'iso', 'backup', 'snippets', 'import'];
     my @suffixes = ('qcow2', 'raw', 'vmdk', 'vhdx');
 
     # run through test cases

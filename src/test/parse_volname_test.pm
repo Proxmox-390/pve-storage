@@ -191,6 +191,21 @@ my $tests = [
         expected => ['import', 'import.ovf', undef, undef, undef, undef, 'ovf'],
     },
     {
+        description => "Import, s390x CKD DASD image",
+        volname => 'import/SYSRS1.ckd',
+        expected => ['import', 'SYSRS1.ckd', undef, undef, undef, undef, 'raw'],
+    },
+    {
+        description => "Import, s390x CKD DASD image (64-bit offsets)",
+        volname => 'import/WORK01.ckd64',
+        expected => ['import', 'WORK01.ckd64', undef, undef, undef, undef, 'raw'],
+    },
+    {
+        description => "Import, s390x FBA DASD image",
+        volname => 'import/disk.fba',
+        expected => ['import', 'disk.fba', undef, undef, undef, undef, 'raw'],
+    },
+    {
         description => "Import, innner file of ova",
         volname => 'import/import.ova/disk.qcow2',
         expected =>
@@ -253,6 +268,11 @@ my $tests = [
         description => "Failed match: import dir but no ova/ovf/disk image",
         volname => "import/test.foo",
         expected => "unable to parse directory volume name 'import/test.foo'\n",
+    },
+    {
+        description => "Failed match: compressed CKD image",
+        volname => "import/SYSRS1.cckd",
+        expected => "unable to parse directory volume name 'import/SYSRS1.cckd'\n",
     },
 ];
 

@@ -921,7 +921,7 @@ sub parse_volname {
     } elsif ($volname =~
         m!^import/(${PVE::Storage::SAFE_CHAR_WITH_WHITESPACE_CLASS_RE}+$PVE::Storage::IMPORT_EXT_RE_1)$!
     ) {
-        return ('import', $1, undef, undef, undef, undef, $2);
+        return ('import', $1, undef, undef, undef, undef, PVE::Storage::import_format($2));
     }
 
     die "unable to parse directory volume name '$volname'\n";
@@ -1939,7 +1939,7 @@ my $get_subdir_files = sub {
                 if $fn !~
                 m!/(${PVE::Storage::SAFE_CHAR_CLASS_RE}+$PVE::Storage::IMPORT_EXT_RE_1)$!i;
 
-            $info = { volid => "$sid:import/$1", format => "$2" };
+            $info = { volid => "$sid:import/$1", format => PVE::Storage::import_format($2) };
         }
 
         $info->{size} = $st->size;

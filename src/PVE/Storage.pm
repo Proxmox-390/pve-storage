@@ -185,9 +185,27 @@ our $VZTMPL_EXT_RE_1 = qr/\.(?|(tar)(?!\.)|tar\.(gz|xz|zst|bz2))/i;
 
 our $BACKUP_EXT_RE_2 = qr/\.(tgz|(?:tar|vma)(?:\.(${\PVE::Storage::Plugin::COMPRESSOR_RE}))?)/;
 
-our $IMPORT_EXT_RE_1 = qr/\.(ova|ovf|qcow2|raw|vmdk)/;
+# also s390x DASD images as Hercules writes them: uncompressed CKD (.ckd, .ckd64) and FBA (.fba)
+# volumes, raw images in qemu-img terms (see import_format())
+our $IMPORT_EXT_RE_1 = qr/\.(ova|ovf|qcow2|raw|vmdk|ckd|ckd64|fba)/;
 
-our $UPLOAD_IMPORT_EXT_RE_1 = qr/\.(ova|qcow2|raw|vmdk)/;
+our $UPLOAD_IMPORT_EXT_RE_1 = qr/\.(ova|qcow2|raw|vmdk|ckd|ckd64|fba)/;
+
+# compressed Hercules DASD images, which need converting before they can be imported
+our $COMPRESSED_DASD_EXT_RE = qr/\.(?:cckd|cckd64|cfba)$/i;
+
+# The image format of an import volume with the extension $ext (captured by $IMPORT_EXT_RE_1).
+sub import_format {
+    my ($ext) = @_;
+    return $ext =~ m/^(?:ckd|ckd64|fba)$/i ? 'raw' : $ext;
+}
+
+sub assert_not_compressed_dasd {
+    my ($filename) = @_;
+    die "compressed DASD images (CCKD, CFBA) cannot be imported, convert them first, for"
+        . " example with Hercules 'dasdcopy -o CKD <in> <out>.ckd' (or cckd2ckd, cfba2fba)\n"
+        if $filename =~ $COMPRESSED_DASD_EXT_RE;
+}
 
 our $SAFE_CHAR_CLASS_RE = qr/[a-zA-Z0-9\-\.\+\=\_]/;
 our $SAFE_CHAR_WITH_WHITESPACE_CLASS_RE = qr/[ a-zA-Z0-9\-\.\+\=\_]/;

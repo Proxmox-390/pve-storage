@@ -185,6 +185,13 @@ my @tests = (
             'import', 'local:import/import.ovf',
         ],
     },
+    {
+        description => 'Import, s390x CKD DASD image',
+        volname => "$storage_dir/import/SYSRS1.ckd",
+        expected => [
+            'import', 'local:import/SYSRS1.ckd',
+        ],
+    },
 
     # no matches, path or files with failures
     {
