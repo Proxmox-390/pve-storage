@@ -916,7 +916,7 @@ sub parse_volname {
         m!^import/(${PVE::Storage::SAFE_CHAR_WITH_WHITESPACE_CLASS_RE}+\.ova\/${PVE::Storage::OVA_CONTENT_RE_1})$!
     ) {
         my $packed_image = $1;
-        my $format = $2;
+        my $format = lc($2); # tape media: AWS or aws
         return ('import', $packed_image, undef, undef, undef, undef, "ova+$format");
     } elsif ($volname =~
         m!^import/(${PVE::Storage::SAFE_CHAR_WITH_WHITESPACE_CLASS_RE}+$PVE::Storage::IMPORT_EXT_RE_1)$!

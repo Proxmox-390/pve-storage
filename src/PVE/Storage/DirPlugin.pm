@@ -296,10 +296,34 @@ sub get_import_metadata {
 
     push @$warnings, ($res->{warnings} // [])->@*;
 
-    # tape media are referenced, not contained: keep a medium only if it is a volume that exists
+    # tape media: those in the OVA are imported into the ISO images content of a storage (this
+    # one if it has it, else 'local'), with the 'import-from' option of the tape drive; a medium
+    # that is only referenced is kept only if it is a volume that exists
     my $create_args = $res->{qm};
+    my $media = $res->{media} // {};
+    my $media_storeid;
+    if ($isOva && scalar(keys %$media)) {
+        my $cfg = PVE::Storage::config();
+        for my $sid ($storeid, 'local') {
+            my $media_scfg = eval { PVE::Storage::storage_check_enabled($cfg, $sid, undef, 1) };
+            next if !$media_scfg || !$media_scfg->{content}->{iso};
+            $media_storeid = $sid;
+            last;
+        }
+    }
     for my $key (sort grep { m/^tape\d+$/ } keys %$create_args) {
         my ($file, $rest) = $create_args->{$key} =~ m/^(?:file=)?([^,]*)(.*)$/;
+        if (my $medium = $media->{$key}) {
+            my $member = "$storeid:$volname/$medium->{relative_path}";
+            if (defined($media_storeid)) {
+                $rest =~ s/(?:^|,)import-from=[^,]*//;
+                $create_args->{$key} = "$media_storeid:0,import-from=$member$rest";
+                next;
+            }
+            push @$warnings, { type => 'tape-medium-missing', key => $key, value => $member };
+            $create_args->{$key} = "none$rest";
+            next;
+        }
         next if $file eq 'none';
         my $exists = eval {
             my $cfg = PVE::Storage::config();
@@ -324,6 +348,7 @@ sub get_import_metadata {
         source => $volname,
         'create-args' => $res->{qm},
         'disks' => $disks,
+        defined($media_storeid) ? ('media-storage' => $media_storeid) : (),
         warnings => $warnings,
         net => $res->{net},
     };

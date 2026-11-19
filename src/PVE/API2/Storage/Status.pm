@@ -1057,6 +1057,14 @@ __PACKAGE__->register_method({
                 description => 'Recognised disk volumes as `$bus$id` => `$storeid:$path` map.'
                     . ' An entry can have \'options\': further drive options to use.',
             },
+            'media-storage' => {
+                type => 'string',
+                optional => 1,
+                description => "The storage (with 'iso' content) the tape media included in"
+                    . " the archive are imported to: the 'create-args' of their tape drives are"
+                    . " '<storage>:0,import-from=<medium>,...'. Another storage with 'iso' content"
+                    . " can be used instead.",
+            },
             'net' => {
                 type => 'object',
                 additionalProperties => 1,

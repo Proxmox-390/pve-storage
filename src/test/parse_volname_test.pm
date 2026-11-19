@@ -223,6 +223,17 @@ my $tests = [
             ['import', 'import.ova/OS disk.vmdk', undef, undef, undef, undef, 'ova+vmdk'],
     },
     {
+        description => "Import, tape medium in an ova",
+        volname => 'import/mf01.ova/SYSTEM.AWS',
+        expected =>
+            ['import', 'mf01.ova/SYSTEM.AWS', undef, undef, undef, undef, 'ova+aws'],
+    },
+    {
+        description => "Import, tape medium in an ova, lower case",
+        volname => 'import/x.ova/tape.aws',
+        expected => ['import', 'x.ova/tape.aws', undef, undef, undef, undef, 'ova+aws'],
+    },
+    {
         description => "Import, innner file of ova",
         volname => 'import/import.ova/disk.raw',
         expected => ['import', 'import.ova/disk.raw', undef, undef, undef, undef, 'ova+raw'],

@@ -210,7 +210,8 @@ sub assert_not_compressed_dasd {
 our $SAFE_CHAR_CLASS_RE = qr/[a-zA-Z0-9\-\.\+\=\_]/;
 our $SAFE_CHAR_WITH_WHITESPACE_CLASS_RE = qr/[ a-zA-Z0-9\-\.\+\=\_]/;
 
-our $OVA_CONTENT_RE_1 = qr/${SAFE_CHAR_WITH_WHITESPACE_CLASS_RE}+\.(qcow2|raw|vmdk)/;
+# disk images, and AWSTAPE images: the media of the tape drives of s390x VMs
+our $OVA_CONTENT_RE_1 = qr/${SAFE_CHAR_WITH_WHITESPACE_CLASS_RE}+\.(qcow2|raw|vmdk|[aA][wW][sS])/;
 
 # FIXME remove with PVE 9.0, add versioned breaks for pve-manager
 our $vztmpl_extension_re = $VZTMPL_EXT_RE_1;

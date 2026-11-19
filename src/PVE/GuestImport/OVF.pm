@@ -380,6 +380,28 @@ ovf:Item[rasd:InstanceID='%s']/rasd:ResourceType", $controller_id,
             };
     }
 
+    # tape drives with their medium in the archive (Proxmox VE exports of s390x VMs), as drive
+    # (ElementName) => file. Only taken over with the tape drives of the Proxmox VE section.
+    my $media = {};
+    my $tape_id = dtmf_name_to_id('Tape Drive');
+    for my $item_node ($xpc->findnodes(
+        "/ovf:Envelope/ovf:VirtualSystem/ovf:VirtualHardwareSection/ovf:Item[rasd:ResourceType=${tape_id}]"
+    )) {
+        my $key = $xpc->findvalue('rasd:ElementName', $item_node);
+        my $host_resource = $xpc->findvalue('rasd:HostResource', $item_node);
+        next if $key !~ m/^tape\d+$/;
+        my ($file_id) = $host_resource =~ m!^(?:ovf:)?/file/([[:alnum:]\-\._~]+)$! or next;
+        my $href = $xpc->findvalue(
+            sprintf("/ovf:Envelope/ovf:References/ovf:File[\@ovf:id='%s']/\@ovf:href", $file_id),
+        );
+        my ($filepath) = $href =~ m|^(${PVE::Storage::SAFE_CHAR_WITH_WHITESPACE_CLASS_RE}+)$|;
+        if (!$filepath || $filepath !~ m/\.aws$/i || $filepath =~ m/^\.\.?$/) {
+            warn "ignoring the medium '$href' of $key, only AWSTAPE images (.aws) are supported\n";
+            next;
+        }
+        $media->{$key} = $filepath;
+    }
+
     my $nic_id = dtmf_name_to_id('Ethernet Adapter');
     my $xpath_find_nics =
         "/ovf:Envelope/ovf:VirtualSystem/ovf:VirtualHardwareSection/ovf:Item[rasd:ResourceType=${nic_id}]";
@@ -415,7 +437,7 @@ ovf:Item[rasd:InstanceID='%s']/rasd:ResourceType", $controller_id,
         }
     }
 
-    return { qm => $qm, disks => \@disks, net => $net, pve => $pve };
+    return { qm => $qm, disks => \@disks, net => $net, pve => $pve, media => $media };
 }
 
 # The configuration keys taken from the Proxmox VE section, with a check of the value. The values
@@ -489,6 +511,7 @@ my sub split_property_string {
 my sub apply_pve_section {
     my ($res, $host_arch) = @_;
 
+    my $media = delete $res->{media} // {};
     my $pve = delete $res->{pve} or return;
     my $warnings = $res->{warnings} //= [];
 
@@ -561,6 +584,11 @@ my sub apply_pve_section {
     $res->{net} = $net if scalar(keys %$net);
     $res->{boot} = $boot if defined($boot);
 
+    # the included media of the tape drives taken over
+    for my $key (sort keys %$media) {
+        $res->{media}->{$key} = $media->{$key} if defined($qm->{$key});
+    }
+
     # an s390x VM (mostly DASDs) only needs the SCSI controller for SCSI disks
     my $has_scsi_disks = grep { ($_->{disk_address} // '') =~ m/^scsi\d+$/ } $res->{disks}->@*;
     delete $qm->{scsihw} if $arch eq 's390x' && !$has_scsi_disks;
@@ -616,6 +644,19 @@ my sub resolve_disks {
         $pve_disk->{options} = $options if defined($options);
         push @disks, $pve_disk;
         push @$boot_order, $pve_disk_address;
+    }
+
+    my $media = $qm->{media} // {};
+    for my $key (sort keys %$media) {
+        my $filepath = $media->{$key};
+        my $ovf_dir = realpath(dirname(File::Spec->rel2abs($ovf)))
+            or die "could not get absolute path of $ovf: $!\n";
+        my $path = realpath(join('/', $ovf_dir, $filepath))
+            or die "could not get absolute path of $filepath: $!\n";
+        die "error parsing $filepath, are you using a symlink ?\n" if $path !~ /^\Q${ovf_dir}\E/;
+        die "error parsing $filepath, file seems not to exist at $path\n" if !$isOva && !-e $path;
+        ($path) = $path =~ m|^(/.*)|; # untaint
+        $media->{$key} = { relative_path => $filepath, backing_file => $path };
     }
 
     if (defined(my $boot = delete $qm->{boot})) {

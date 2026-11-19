@@ -37,6 +37,7 @@ sub extract_disk_from_import_file {
     }
 
     die "cannot determine format of '$volid'\n" if !$inner_fmt;
+    die "'$volid' is a tape medium, not a disk image\n" if $inner_fmt eq 'aws';
 
     my $ova_path = PVE::Storage::path($cfg, $archive_volid);
 
@@ -89,6 +90,87 @@ sub extract_disk_from_import_file {
     File::Path::remove_tree($tmpdir);
 
     return $target_volid;
+}
+
+# Extract a tape medium (an AWSTAPE image) from an OVA ('<storage>:import/<x>.ova/<file>.aws') into
+# the ISO images content of storage $target_storeid, where tape media live. The medium keeps its
+# file name. If a file of that name is there already, it is used if it has the same content, else
+# the medium gets a free name '<name>-<n>.aws'. Returns the volume ID of the medium.
+sub extract_media_from_import_file {
+    my ($volid, $target_storeid) = @_;
+
+    my $cfg = PVE::Storage::config();
+    my ($source_storeid) = PVE::Storage::parse_volume_id($volid);
+    my ($vtype, $name, undef, undef, undef, undef, $fmt) =
+        PVE::Storage::parse_volname($cfg, $volid);
+
+    die "only files with content type 'import' can be extracted\n" if $vtype ne 'import';
+    die "'$volid' is not a tape medium (.aws) in an OVA\n" if $fmt ne 'ova+aws';
+    my ($archive, $inner_file) =
+        $name =~ m!^(.*\.ova)/(${PVE::Storage::SAFE_CHAR_WITH_WHITESPACE_CLASS_RE}+)$!
+        or die "cannot extract $volid - invalid volume name\n";
+    my $ova_path = PVE::Storage::path($cfg, "$source_storeid:import/$archive");
+
+    my $scfg = PVE::Storage::storage_config($cfg, $target_storeid);
+    die "storage '$target_storeid' does not have the 'iso' content type for tape media\n"
+        if !$scfg->{content}->{iso};
+    PVE::Storage::activate_storage($cfg, $target_storeid);
+    my $iso_dir = PVE::Storage::get_iso_dir($cfg, $target_storeid);
+    mkpath $iso_dir;
+
+    my $tmpdir = "$iso_dir/.import-tmp-$$";
+    mkpath $tmpdir;
+    my $res;
+    eval {
+        run_command([
+            'tar',
+            '-x',
+            '--force-local',
+            '--no-same-owner',
+            '-C',
+            $tmpdir,
+            '-f',
+            $ova_path,
+            '--',
+            $inner_file,
+        ]);
+        my $source_path = "$tmpdir/$inner_file";
+        die "extracted file '$inner_file' from '$ova_path' is not a regular file\n"
+            if -l $source_path || !-f $source_path;
+
+        (my $base = $inner_file) =~ s/\s+/_/g;
+        my ($stem, $ext) = $base =~ m/^(.*?)(\.[^.]+)$/;
+        for my $n (0 .. 999) {
+            my $file = $n ? "$stem-$n$ext" : $base;
+            my $target = "$iso_dir/$file";
+            if (-e $target) {
+                my $same = eval {
+                    run_command(['cmp', '-s', '--', $source_path, $target]);
+                    1;
+                };
+                if ($same) {
+                    print "tape medium '$file' is on storage '$target_storeid' already\n";
+                    $res = "$target_storeid:iso/$file";
+                    last;
+                }
+                next;
+            }
+            # link() does not replace a file that appeared meanwhile, unlike rename()
+            if (link($source_path, $target)) {
+                print "extracted tape medium '$inner_file' to '$target_storeid:iso/$file'\n";
+                $res = "$target_storeid:iso/$file";
+                last;
+            }
+            die "unable to create '$target' - $!\n" if !$!{EEXIST};
+        }
+        die "no free name for the tape medium '$inner_file' on storage '$target_storeid'\n"
+            if !defined($res);
+    };
+    my $err = $@;
+    File::Path::remove_tree($tmpdir);
+    die "error extracting tape medium: $err" if $err;
+
+    return $res;
 }
 
 1;

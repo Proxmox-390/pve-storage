@@ -252,4 +252,47 @@ is_deeply(
 );
 ok(!defined($hostile->{disks}->[1]->{options}->{file}), 'hostile: no file option for a disk');
 
+# an export with the tape medium included (qm export-ova --include-media 1, the default), with the
+# DASD model and volume names
+{
+    mkdir "$tmpdir/media";
+    PVE::Tools::file_set_contents(
+        "$tmpdir/media/mf01.ovf",
+        PVE::Tools::file_get_contents("$test_manifests/mf01-s390x-media.ovf"),
+    );
+    PVE::Tools::file_set_contents("$tmpdir/media/SYSTEM.AWS", 'tape');
+    system('tar', '-cf', "$tmpdir/media.ova", '-C', "$tmpdir/media", 'mf01.ovf', 'SYSTEM.AWS')
+        == 0
+        or die;
+    my $res = PVE::GuestImport::OVF::parse_ovf("$tmpdir/media.ova", 1, 0, 's390x');
+    is_deeply(
+        $res->{media},
+        { tape0 => { relative_path => 'SYSTEM.AWS', backing_file => "$tmpdir/SYSTEM.AWS" } },
+        'media: the tape medium in the archive',
+    );
+    is($res->{qm}->{tape0}, 'local:iso/SYSTEM.AWS', 'media: tape drive');
+    is_deeply(
+        $res->{disks}->[0]->{options},
+        { devno => '0.0.0200', model => '3390-9', name => 'SYSRS1' },
+        'media: ckd0 keeps device number, model and volume name',
+    );
+    is($res->{qm}->{machine}, 'czam', 'media: machine type');
+
+    my $foreign = PVE::GuestImport::OVF::parse_ovf("$tmpdir/media.ova", 1, 0, 'x86_64');
+    ok(!$foreign->{media}, 'media: not taken over without the Proxmox VE section');
+
+    # a medium that is no tape image, or not in the archive directory
+    for my $href ('../../etc/shadow', 'disk.vmdk') {
+        my $ovf = PVE::Tools::file_get_contents("$test_manifests/mf01-s390x-media.ovf");
+        $ovf =~ s/ovf:href="SYSTEM.AWS"/ovf:href="$href"/;
+        PVE::Tools::file_set_contents("$tmpdir/media/mf01.ovf", $ovf);
+        system('tar', '-cf', "$tmpdir/bad.ova", '-C', "$tmpdir/media", 'mf01.ovf') == 0 or die;
+        my $bad = eval {
+            local $SIG{__WARN__} = sub { };
+            PVE::GuestImport::OVF::parse_ovf("$tmpdir/bad.ova", 1, 0, 's390x');
+        };
+        ok(!$bad || !$bad->{media}, "media: '$href' refused");
+    }
+}
+
 done_testing();
