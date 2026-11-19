@@ -561,6 +561,10 @@ my sub apply_pve_section {
     $res->{net} = $net if scalar(keys %$net);
     $res->{boot} = $boot if defined($boot);
 
+    # an s390x VM (mostly DASDs) only needs the SCSI controller for SCSI disks
+    my $has_scsi_disks = grep { ($_->{disk_address} // '') =~ m/^scsi\d+$/ } $res->{disks}->@*;
+    delete $qm->{scsihw} if $arch eq 's390x' && !$has_scsi_disks;
+
     return;
 }
 

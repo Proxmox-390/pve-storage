@@ -172,6 +172,7 @@ is($qm->{ostype}, 'other', 's390x: OS type');
 is($qm->{memory}, '2048', 's390x: memory');
 is($qm->{name}, 'mf01', 's390x: name');
 is($qm->{tape0}, 'local:iso/SYSTEM.AWS', 's390x: tape drive');
+ok(!exists($qm->{scsihw}), 's390x: no SCSI controller without SCSI disks');
 is_deeply(
     [map { $qm->{"terminal$_"} } 0 .. 2],
     [qw(0.0.0300 0.0.0301 0.0.0302)],

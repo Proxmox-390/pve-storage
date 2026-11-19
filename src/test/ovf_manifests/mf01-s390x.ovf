@@ -143,6 +143,7 @@
       <pve:Config pve:key="machine" pve:value="mtm-3907"/>
       <pve:Config pve:key="memory" pve:value="2048"/>
       <pve:Config pve:key="ostype" pve:value="other"/>
+      <pve:Config pve:key="scsihw" pve:value="virtio-scsi-pci"/>
       <pve:Config pve:key="tape0" pve:value="local:iso/SYSTEM.AWS"/>
       <pve:Config pve:key="terminal0" pve:value="0.0.0300"/>
       <pve:Config pve:key="terminal1" pve:value="0.0.0301"/>
