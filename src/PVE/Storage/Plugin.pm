@@ -922,6 +922,9 @@ sub parse_volname {
         m!^import/(${PVE::Storage::SAFE_CHAR_WITH_WHITESPACE_CLASS_RE}+$PVE::Storage::IMPORT_EXT_RE_1)$!
     ) {
         return ('import', $1, undef, undef, undef, undef, PVE::Storage::import_format($2));
+    } elsif ($volname =~ m!^import/[^/]+$!) {
+        # a compressed DASD image: say how to make it importable
+        PVE::Storage::assert_not_compressed_dasd($volname);
     }
 
     die "unable to parse directory volume name '$volname'\n";

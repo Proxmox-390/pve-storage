@@ -270,9 +270,18 @@ my $tests = [
         expected => "unable to parse directory volume name 'import/test.foo'\n",
     },
     {
-        description => "Failed match: compressed CKD image",
+        description => "Failed match: compressed CKD image, with conversion hint",
         volname => "import/SYSRS1.cckd",
-        expected => "unable to parse directory volume name 'import/SYSRS1.cckd'\n",
+        expected => "compressed DASD images (CCKD, CFBA) cannot be imported, convert them first,"
+            . " for example with Hercules 'dasdcopy -o CKD <in> <out>.ckd' (or cckd2ckd,"
+            . " cfba2fba)\n",
+    },
+    {
+        description => "Failed match: compressed FBA image, with conversion hint",
+        volname => "import/disk.CFBA",
+        expected => "compressed DASD images (CCKD, CFBA) cannot be imported, convert them first,"
+            . " for example with Hercules 'dasdcopy -o CKD <in> <out>.ckd' (or cckd2ckd,"
+            . " cfba2fba)\n",
     },
 ];
 
