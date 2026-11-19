@@ -165,7 +165,7 @@ is_deeply(
     's390x: qeth adapter with MAC address and device number',
 );
 my $qm = $mf->{qm};
-is($qm->{machine}, 'mtm-3907', 's390x: machine type');
+is($qm->{machine}, 'czam', 's390x: machine type');
 is($qm->{ipl}, 'ckd0', 's390x: IPL device');
 is($qm->{boot}, 'order=ckd0;net0', 's390x: boot order');
 is($qm->{ostype}, 'other', 's390x: OS type');

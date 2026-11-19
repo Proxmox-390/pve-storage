@@ -140,7 +140,7 @@
       <Info>Proxmox VE virtual machine configuration</Info>
       <pve:Config pve:key="boot" pve:value="order=ckd0;net0"/>
       <pve:Config pve:key="ipl" pve:value="ckd0"/>
-      <pve:Config pve:key="machine" pve:value="mtm-3907"/>
+      <pve:Config pve:key="machine" pve:value="czam"/>
       <pve:Config pve:key="memory" pve:value="2048"/>
       <pve:Config pve:key="ostype" pve:value="other"/>
       <pve:Config pve:key="scsihw" pve:value="virtio-scsi-pci"/>
