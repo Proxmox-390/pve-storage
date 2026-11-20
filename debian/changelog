@@ -1,3 +1,20 @@
+libpve-storage-perl (9.1.18+s390x1) trixie; urgency=medium
+
+  * s390x port, rebased onto 9.1.18:
+    - accept AWSTAPE tape images (.aws) as ISO images content, the install
+      media of the tape drives of s390x VMs.
+    - disks: use ID_SERIAL if there is no ID_SERIAL_SHORT, so that virtio
+      disks show their serial.
+    - import: accept the uncompressed DASD images of Hercules (.ckd, .ckd64,
+      .fba) as raw import content; compressed CCKD/CFBA images get a
+      conversion hint.
+    - guest import: ovf: read the Proxmox VE configuration section written by
+      qm export-ova (host architecture only, allow-list); no scsihw for
+      s390x VMs without SCSI disks; import the tape media included in an OVA
+      into the ISO images content of a storage.
+
+ -- Yvan Janssens <yvanj@cyber.gent>  Fri, 20 Nov 2026 14:16:47 +0100
+
 libpve-storage-perl (9.1.18) trixie; urgency=medium
 
   * plugin api: support third-party plugins that isolate their properties, so
